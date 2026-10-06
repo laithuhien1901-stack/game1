@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>幸運大轉盤遊戲</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);
+            min-height: 100vh;
+        }
+        /* 轉盤外框霓虹燈特效 */
+        .neon-border {
+            box-shadow: 0 0 25px rgba(168, 85, 247, 0.6), inset 0 0 15px rgba(168, 85, 247, 0.4);
+        }
+        /* 指針三角形樣式 */
+        .pointer {
+            width: 0;
+            height: 0;
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+            border-top: 40px solid #f43f5e;
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.4));
+            z-index: 50;
+        }
+    </style>
+</head>
+<body class="text-white flex flex-col items-center justify-center p-4">
+
+    <header class="text-center mb-6">
+        <h1 class="text-4xl md:text-5xl font-extrabold bg-gradient-to-r from-pink-400 via-purple-300 to-indigo-400 bg-clip-text text-transparent mb-2">
+            🎡 幸運大轉盤
+        </h1>
+        <p class="text-purple-200 text-sm md:text-base">轉動屬於你的幸運時刻！快來試試手氣吧！</p>
+    </header>
+
+    <main class="flex flex-col lg:flex-row items-center gap-8 max-w-5xl w-full justify-center">
+        
+        {/* 轉盤容器 */}
+        <div class="relative flex flex-col items-center">
+            {/* 頂部指針 */}
+            <div class="absolute -top-4 pointer animate-bounce"></div>
+
+            {/* 轉盤本體外框 */}
+            <div class="relative w-72 h-72 sm:w-96 sm:h-96 rounded-full p-3 bg-gradient-to-tr from-purple-600 via-pink-600 to-amber-500 neon-border flex items-center justify-center">
+                
+                {/* 內部畫布 */}
+                <canvas id="wheelCanvas" class="w-full h-full rounded-full cursor-pointer shadow-inner bg-slate-900"></canvas>
+
+                {/* 中心點按鈕 */}
+                <button id="spinBtn" onclick="spinWheel()" class="absolute w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 text-slate-900 font-extrabold text-lg sm:text-xl shadow-2xl border-4 border-white flex flex-col items-center justify-center transition-transform hover:scale-105 active:scale-95 focus:outline-none">
+                    <span>SPIN</span>
+                    <span class="text-xs font-semibold opacity-80">抽獎</span>
+                </button>
+            </div>
+        </div>
+
+        {/* 控制面板與獎項列表 */}
+        <div class="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 shadow-2xl w-full max-w-md flex flex-col gap-4">
+            <h2 class="text-xl font-bold text-pink-300 flex items-center gap-2">
+                <span>🎁</span> 獎項設定與清單
+            </h2>
+            
+            {/* 獎項列表動態顯示 */}
+            <div id="prizeList" class="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+                {/* 透過 JS 動態載入 */}
+            </div>
+
+            {/* 自定義獎項輸入區 */}
+            <div class="flex gap-2 mt-2">
+                <input type="text" id="newPrizeInput" placeholder="輸入新獎項名稱..." class="flex-1 px-4 py-2 rounded-xl bg-slate-800/80 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:border-pink-500 text-sm">
+                <button onclick="addPrize()" class="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-semibold text-sm hover:opacity-90 transition shadow-md">
+                    新增
+                </button>
+            </div>
+
+            <button onclick="resetDefaultPrizes()" class="text-xs text-purple-300 hover:text-white underline text-center mt-1">
+                恢復預設獎項
+            </button>
+        </div>
+    </main>
+
+    <!-- 中獎彈窗 -->
+    <div id="resultModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center hidden z-50 p-4">
+        <div class="bg-slate-900 border border-purple-500/50 p-8 rounded-3xl max-w-sm w-full text-center shadow-2xl transform scale-95 transition-transform duration-300" id="modalContent">
+            <div class="text-6xl mb-4 animate-bounce">🎉</div>
+            <h3 class="text-2xl font-extrabold text-white mb-2">恭喜中獎！</h3>
+            <p id="resultText" class="text-lg text-pink-400 font-semibold mb-6">獲得獎項：-</p>
+            <button onclick="closeModal()" class="w-full py-3 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl font-bold text-white shadow-lg hover:opacity-90 transition">
+                太棒了！再轉一次
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 預設獎項資料
+        let prizes = [
+            { name: "特獎：iPhone", color: "#f43f5e" },
+            { name: "銘謝惠顧", color: "#3b82f6" },
+            { name: "現金 $1000", color: "#10b981" },
+            { name: "精美禮品", color: "#f59e0b" },
+            { name: "再來一次", color: "#8b5cf6" },
+            { name: "神秘大獎", color: "#ec4899" },
+            { name: "現金 $500", color: "#06b6d4" },
+            { name: "餐券一張", color: "#84cc16" }
+        ];
+
+        let currentAngle = 0; // 當前旋轉角度
+        let isSpinning = false; // 是否正在旋轉
+
+        const canvas = document.getElementById('wheelCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 初始化音效 (使用 Web Audio API)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playTickSound() {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.05);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.05);
+        }
+
+        // 初始化畫面與事件
+        window.onload = function() {
+            resizeCanvas();
+            drawWheel();
+            renderPrizeList();
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+                drawWheel();
+            });
+        };
+
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+
+        // 繪製轉盤
+        function drawWheel() {
+            const width = canvas.width / window.devicePixelRatio;
+            const height = canvas.height / window.devicePixelRatio;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const radius = Math.min(centerX, centerY) - 10;
+
+            ctx.clearRect(0, 0, width, height);
+
+            const arcSize = (2 * Math.PI) / prizes.length;
+
+            prizes.forEach((prize, index) => {
+                const angle = currentAngle + index * arcSize;
+
+                // 繪製扇形
+                ctx.beginPath();
+                ctx.fillStyle = prize.color;
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, angle, angle + arcSize);
+                ctx.lineTo(centerX, centerY);
+                ctx.fill();
+
+                // 繪製扇形邊框
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // 繪製文字
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(angle + arcSize / 2);
+                ctx.textAlign = 'right';
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 13px Inter';
+                // 根據項目多長動態調整文字顯示
+                let displayName = prize.name;
+                if (displayName.length > 7) {
+                    displayName = displayName.substring(0, 6) + '...';
+                }
+                ctx.fillText(displayName, radius - 20, 6);
+                ctx.restore();
+            });
+        }
+
+        // 轉動轉盤主邏輯
+        function spinWheel() {
+            if (isSpinning || prizes.length === 0) return;
+            if (prizes.length < 2) {
+                alertBox("請至少設定 2 個以上的獎項！");
+                return;
+            }
+
+            isSpinning = true;
+            document.getElementById('spinBtn').disabled = true;
+
+            // 隨機旋轉圈數 (5 ~ 8 圈) 加隨機角度
+            const minSpins = 5;
+            const maxSpins = 8;
+            const randomSpins = Math.floor(Math.random() * (maxSpins - minSpins + 1)) + minSpins;
+            const extraAngle = Math.random() * 2 * Math.PI;
+            const totalRotation = currentAngle + (randomSpins * 2 * Math.PI) + extraAngle;
+
+            const duration = 4000; // 4 秒
+            const startTime = performance.now();
+            const startAngle = currentAngle;
+
+            let lastTickAngle = startAngle;
+
+            function animateSpin(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                
+                // 使用 easeOutCubic 讓轉盤減速更自然
+                const easeOut = 1 - Math.pow(1 - progress, 3);
+                currentAngle = startAngle + (totalRotation - startAngle) * easeOut;
+
+                // 檢查是否跨過扇形邊界以發出音效
+                const arcSize = (2 * Math.PI) / prizes.length;
+                if (Math.abs(currentAngle - lastTickAngle) >= arcSize / 2) {
+                    playTickSound();
+                    lastTickAngle = currentAngle;
+                }
+
+                drawWheel();
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateSpin);
+                } else {
+                    isSpinning = false;
+                    document.getElementById('spinBtn').disabled = false;
+                    determineWinner();
+                }
+            }
+
+            requestAnimationFrame(animateSpin);
+        }
+
+        // 計算中獎結果
+        function determineWinner() {
+            const arcSize = (2 * Math.PI) / prizes.length;
+            // 指針位於頂部 (-Math.PI / 2)
+            // 將當前角度正規化到 0 ~ 2*PI
+            let normalizedAngle = currentAngle % (2 * Math.PI);
+            if (normalizedAngle < 0) normalizedAngle += 2 * Math.PI;
+
+            // 計算指針指向的索引 (指針在頂部，角度為 3點鐘方向基準或自定義)
+            // 由於 HTML5 canvas 預設 0 度在右側，我們需要把頂部 (-90度 / 270度) 對應好
+            const pointerOffset = 1.5 * Math.PI; // 頂部角度
+            let effectiveAngle = (pointerOffset - normalizedAngle) % (2 * Math.PI);
+            if (effectiveAngle < 0) effectiveAngle += 2 * Math.PI;
+
+            const winningIndex = Math.floor(effectiveAngle / arcSize) % prizes.length;
+            const winner = prizes[winningIndex];
+
+            showResultModal(winner.name);
+        }
+
+        // 顯示中獎彈窗
+        function showResultModal(prizeName) {
+            document.getElementById('resultText').innerText = `獲得獎項：${prizeName}`;
+            const modal = document.getElementById('resultModal');
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('resultModal').classList.add('hidden');
+        }
+
+        // 自製安全提示框取代 alert
+        function alertBox(message) {
+            document.getElementById('resultText').innerText = message;
+            document.querySelector('#resultModal h3').innerText = "提示";
+            document.getElementById('resultModal').classList.remove('hidden');
+        }
+
+        // 渲染獎項列表管理區
+        function renderPrizeList() {
+            const listContainer = document.getElementById('prizeList');
+            listContainer.innerHTML = '';
+
+            prizes.forEach((prize, index) => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between bg-slate-800/60 px-3 py-2 rounded-xl border border-white/10 text-sm';
+                item.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <span class="w-4 h-4 rounded-full shadow" style="background-color: ${prize.color};"></span>
+                        <span class="font-medium">${prize.name}</span>
+                    </div>
+                    <button onclick="removePrize(${index})" class="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 transition">刪除</button>
+                `;
+                listContainer.appendChild(item);
+            });
+        }
+
+        // 新增獎項
+        function addPrize() {
+            const input = document.getElementById('newPrizeInput');
+            const name = input.value.trim();
+            if (!name) return;
+
+            // 隨機指派鮮豔顏色
+            const colors = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#eab308'];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+            prizes.push({ name: name, color: randomColor });
+            input.value = '';
+            drawWheel();
+            renderPrizeList();
+        }
+
+        // 刪除獎項
+        function removePrize(index) {
+            if (prizes.length <= 2) {
+                alertBox("轉盤至少需要保留 2 個獎項！");
+                return;
+            }
+            prizes.splice(index, 1);
+            drawWheel();
+            renderPrizeList();
+        }
+
+        // 恢復預設
+        function resetDefaultPrizes() {
+            prizes = [
+                { name: "特獎：iPhone", color: "#f43f5e" },
+                { name: "銘謝惠顧", color: "#3b82f6" },
+                { name: "現金 $1000", color: "#10b981" },
+                { name: "精美禮品", color: "#f59e0b" },
+                { name: "再來一次", color: "#8b5cf6" },
+                { name: "神秘大獎", color: "#ec4899" },
+                { name: "現金 $500", color: "#06b6d4" },
+                { name: "餐券一張", color: "#84cc16" }
+            ];
+            drawWheel();
+            renderPrizeList();
+        }
+    </script>
+</body>
+</html>
